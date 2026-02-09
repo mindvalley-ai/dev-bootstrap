@@ -6,7 +6,7 @@ set -euo pipefail
 # - Homebrew (optional install)
 # - Git + GitHub CLI (gh)
 # - Optional Claude Code CLI install (official installer)
-# - SSH key creation + ssh-agent + ~/.ssh/config
+# - SSH key creation + ssh-agent + ~/.ssh/config (NON-DESTRUCTIVE: does NOT override your default github.com key)
 # - Opens GitHub SSH keys page for final paste + SSO enable (if applicable)
 #
 # Run locally (no chmod needed):  bash dev-setup-macos.sh
@@ -62,6 +62,51 @@ pause_until_ready() {
   read -r -p "Press Enter when you're ready to continue... " _
 }
 
+ensure_local_bin_on_path() {
+  local local_bin="$HOME/.local/bin"
+
+  # Already in PATH for this session?
+  if [[ ":$PATH:" == *":$local_bin:"* ]]; then
+    return
+  fi
+
+  # Pick the right rc file based on the current login shell
+  local shell_name rc_file
+  shell_name="$(basename "${SHELL:-}")"
+
+  case "$shell_name" in
+    zsh)
+      rc_file="$HOME/.zshrc"
+      ;;
+    bash)
+      # macOS bash login shells commonly read .bash_profile
+      if [[ -f "$HOME/.bash_profile" ]]; then
+        rc_file="$HOME/.bash_profile"
+      else
+        rc_file="$HOME/.bashrc"
+      fi
+      ;;
+    *)
+      rc_file="$HOME/.profile"
+      ;;
+  esac
+
+  # Avoid duplicates if already present
+  if [[ -f "$rc_file" ]] && grep -q 'HOME/.local/bin' "$rc_file"; then
+    export PATH="$local_bin:$PATH"
+    return
+  fi
+
+  {
+    echo ""
+    echo "# Added by dev bootstrap script (Claude CLI)"
+    echo 'export PATH="$HOME/.local/bin:$PATH"'
+  } >> "$rc_file"
+
+  export PATH="$local_bin:$PATH"
+  ok "Added ~/.local/bin to PATH via $(basename "$rc_file")"
+}
+
 # Safety: this script is intended for macOS
 if [[ "$(uname -s)" != "Darwin" ]]; then
   warn "This script is intended for macOS (Darwin). Detected: $(uname -s)"
@@ -72,6 +117,9 @@ hr
 msg "macOS Dev Setup (public-safe)"
 msg "This script does NOT include any company/org-specific identifiers."
 msg "It can install: Xcode CLT, Homebrew, git, gh, optional Claude CLI, and set up a GitHub SSH key."
+msg ""
+msg "Important: This script will NOT override your default GitHub SSH key."
+msg "It adds a separate SSH host alias you can use for the new key."
 hr
 
 # --------------------
@@ -81,7 +129,7 @@ DEFAULT_EMAIL="your.email@example.com"
 EMAIL="$(prompt_default "Enter the email to use as the SSH key comment" "$DEFAULT_EMAIL")"
 
 DEFAULT_LABEL="work"
-LABEL_RAW="$(prompt_default "Optional label for the SSH key filename (e.g., work, company, github)" "$DEFAULT_LABEL")"
+LABEL_RAW="$(prompt_default "Optional label for this setup (used to name the SSH alias/key) e.g., work, company" "$DEFAULT_LABEL")"
 LABEL="$(sanitize_filename "$LABEL_RAW")"
 [[ -z "$LABEL" ]] && LABEL="work"
 
@@ -92,6 +140,9 @@ KEY_NAME="$(sanitize_filename "$KEY_NAME_RAW")"
 
 KEY_TITLE_DEFAULT="$(hostname)-ssh-${LABEL}"
 KEY_TITLE="$(prompt_default "Suggested key title (shown in GitHub UI / gh)" "$KEY_TITLE_DEFAULT")"
+
+# Non-destructive SSH alias (keeps github.com using your existing default key)
+SSH_ALIAS="github-${LABEL}"
 
 hr
 
@@ -205,11 +256,18 @@ else
   if confirm "Install Claude Code CLI now?"; then
     # Transparent: run exactly what we printed
     bash -lc "$CLAUDE_INSTALL_CMD" || warn "Claude installer returned non-zero exit code."
+
+    # Claude commonly installs to ~/.local/bin; ensure it is on PATH
+    ensure_local_bin_on_path
+
     if have_cmd claude; then
-      ok "Claude CLI installed: $(claude --version 2>/dev/null || echo 'version unknown')"
+      ok "Claude CLI available: $(claude --version 2>/dev/null || echo installed)"
     else
-      warn "Claude CLI still not found. You may need to restart Terminal or follow instructions at:"
-      msg "  $CLAUDE_INFO_URL"
+      warn "Claude CLI still not found on PATH."
+      msg "Check if it exists here:"
+      msg "  ls -l ~/.local/bin/claude"
+      msg "If it exists, open a NEW Terminal (or run: source ~/.zshrc or ~/.bash_profile)."
+      msg "More info: $CLAUDE_INFO_URL"
       open_url "$CLAUDE_INFO_URL"
     fi
   else
@@ -220,10 +278,10 @@ else
 fi
 
 # --------------------
-# Step 5: SSH key setup
+# Step 5: SSH key setup (non-destructive)
 # --------------------
 hr
-msg "Step 5) GitHub SSH key setup"
+msg "Step 5) GitHub SSH key setup (non-destructive)"
 
 SSH_DIR="$HOME/.ssh"
 PRIV_KEY="$SSH_DIR/$KEY_NAME"
@@ -262,19 +320,20 @@ ok "Key added to ssh-agent."
 touch "$SSH_CONFIG"
 chmod 600 "$SSH_CONFIG"
 
-# Add a generic github.com host entry if missing (no org names)
-if ! grep -qE '^\s*Host\s+github\.com\s*$' "$SSH_CONFIG"; then
+# Add an alias host entry (DO NOT change existing github.com behavior)
+# Example: Host github-work -> uses the new key; github.com remains default.
+if ! grep -qE "^\s*Host\s+${SSH_ALIAS}\s*$" "$SSH_CONFIG"; then
   cat >> "$SSH_CONFIG" <<EOF
 
-Host github.com
+Host ${SSH_ALIAS}
   HostName github.com
   User git
-  IdentityFile $PRIV_KEY
+  IdentityFile ${PRIV_KEY}
   IdentitiesOnly yes
 EOF
-  ok "Added github.com entry to ~/.ssh/config"
+  ok "Added SSH alias '${SSH_ALIAS}' to ~/.ssh/config (default github.com unchanged)"
 else
-  msg "ℹ️ ~/.ssh/config already contains a github.com entry (not modifying)."
+  msg "ℹ️ ~/.ssh/config already contains Host ${SSH_ALIAS} (not modifying)."
 fi
 
 # Copy pubkey to clipboard
@@ -316,7 +375,7 @@ if gh auth status >/dev/null 2>&1; then
     fi
   fi
 else
-  msg "github cli is not authenticated; you'll add the key in the browser."
+  msg "ℹ️ gh is not authenticated; you'll add the key in the browser."
 fi
 
 if [[ "$KEY_ADDED_VIA_GH" != "yes" ]]; then
@@ -324,15 +383,21 @@ if [[ "$KEY_ADDED_VIA_GH" != "yes" ]]; then
 fi
 
 # --------------------
-# Step 7: Test SSH
+# Step 7: Test SSH (tests the NEW key via alias; does not affect your default)
 # --------------------
 hr
-msg "Step 7) Test SSH connectivity to GitHub"
-msg "Running: ssh -T git@github.com"
-ssh -T git@github.com || true
+msg "Step 7) Test SSH connectivity to GitHub using the NEW key via alias"
+msg "Running: ssh -T git@${SSH_ALIAS}"
+ssh -T "git@${SSH_ALIAS}" || true
 
 hr
 ok "Done."
-msg "Tip: If a repo was cloned via HTTPS, you can switch it to SSH:"
-msg "  git remote set-url origin git@github.com:<owner>/<repo>.git"
+
+msg ""
+msg "How to use the new key without changing your default:"
+msg "  - Clone with:   git clone git@${SSH_ALIAS}:<owner>/<repo>.git"
+msg "  - Or set remote: git remote set-url origin git@${SSH_ALIAS}:<owner>/<repo>.git"
+msg ""
+msg "Your existing default GitHub setup remains on:"
+msg "  - git@github.com:<owner>/<repo>.git"
 hr
