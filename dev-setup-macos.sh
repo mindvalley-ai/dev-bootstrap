@@ -10,7 +10,6 @@ set -euo pipefail
 # - Opens GitHub SSH keys page for final paste + SSO enable (if applicable)
 #
 # Run locally (no chmod needed):  bash dev-setup-macos.sh
-# Run from URL:                  bash <(curl -fsSL https://raw.githubusercontent.com/<ORG>/<REPO>/main/dev-setup-macos.sh)
 
 GITHUB_KEYS_URL="https://github.com/settings/keys"
 BREW_INSTALL_URL="https://brew.sh"
@@ -22,8 +21,8 @@ CLAUDE_INFO_URL="https://claude.ai/code"
 
 hr() { printf "\n------------------------------------------------------------\n"; }
 msg() { printf "%s\n" "$*"; }
-warn() { printf "⚠️  %s\n" "$*"; }
-ok() { printf "✅ %s\n" "$*"; }
+warn() { printf "%s\n" "$*"; }
+ok() { printf "%s\n" "$*"; }
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -317,7 +316,7 @@ if gh auth status >/dev/null 2>&1; then
     fi
   fi
 else
-  msg "ℹ️ gh is not authenticated; you'll add the key in the browser."
+  msg "github cli is not authenticated; you'll add the key in the browser."
 fi
 
 if [[ "$KEY_ADDED_VIA_GH" != "yes" ]]; then
