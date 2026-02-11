@@ -220,6 +220,8 @@ ensure_brew_pkg() {
 
 ensure_brew_pkg "git" "Git"
 ensure_brew_pkg "gh" "GitHub CLI (gh)"
+ensure_brew_pkg "gitleaks" "Gitleaks (secret scanner)"
+
 
 # --------------------
 # Step 3: gh auth
@@ -276,6 +278,61 @@ else
     msg "  $CLAUDE_INSTALL_CMD"
   fi
 fi
+
+# --------------------
+# Step 4.5: Global Git Pre-Commit Hook (Gitleaks)
+# --------------------
+hr
+msg "Step 4.5) Global Git secret scanning (pre-commit hook)"
+
+GIT_HOOKS_DIR="$HOME/.git-hooks"
+PRE_COMMIT_HOOK="$GIT_HOOKS_DIR/pre-commit"
+
+mkdir -p "$GIT_HOOKS_DIR"
+
+# Configure git to use global hooks
+git config --global core.hooksPath "$GIT_HOOKS_DIR"
+
+# Create global pre-commit hook
+cat > "$PRE_COMMIT_HOOK" <<'EOF'
+#!/usr/bin/env bash
+
+# Global pre-commit hook: Gitleaks scan
+
+echo "Running global secret scan (gitleaks)..."
+
+# Skip during merges
+if [ -f .git/MERGE_HEAD ]; then
+  exit 0
+fi
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks not found. Skipping secret scan."
+  exit 0
+fi
+
+# Scan staged changes
+gitleaks protect --staged --verbose --no-banner
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "Possible secret detected."
+  echo "Please remove secrets before committing."
+  echo "Docs: https://github.com/mindvalley-ai/ai-dev-bootstrap/blob/main/SECRETS.md"
+  echo ""
+  exit 1
+fi
+
+echo "Secret scan passed."
+exit 0
+EOF
+
+chmod +x "$PRE_COMMIT_HOOK"
+
+ok "Global pre-commit hook installed at: $PRE_COMMIT_HOOK"
+ok "Git configured to use: $GIT_HOOKS_DIR"
+
 
 # --------------------
 # Step 5: SSH key setup (non-destructive)
