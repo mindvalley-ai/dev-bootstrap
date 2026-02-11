@@ -39,7 +39,7 @@ The script **does not** overwrite any existing GitHub SSH key. It uses a separat
 **Option A - Run from the web (no clone):**
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/mindvalley-ai/ai-dev-bootstrap/main/scripts/macos-setup.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mindvalley-ai/dev-bootstrap/main/scripts/macos-setup.sh)"
 ```
 
 Replace `YOUR_USERNAME` with the GitHub username that owns this repo (or the fork you’re using).
@@ -48,8 +48,8 @@ Replace `YOUR_USERNAME` with the GitHub username that owns this repo (or the for
 
 ```bash
 cd ~
-git clone https://github.com/mindvalley-ai/ai-dev-bootstrap.git
-cd ai-dev-bootstrap
+git clone https://github.com/mindvalley-ai/dev-bootstrap.git
+cd dev-bootstrap
 bash scripts/macos-setup.sh
 ```
 

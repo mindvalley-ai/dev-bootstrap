@@ -294,7 +294,7 @@ git config --global core.hooksPath "$GIT_HOOKS_DIR"
 cat > "$PRE_COMMIT_HOOK" <<'EOF'
 #!/usr/bin/env bash
 
-DOCS_URL="https://github.com/mindvalley-ai/ai-dev-bootstrap/blob/main/SECRETS.md"
+DOCS_URL="https://github.com/mindvalley-ai/dev-bootstrap/blob/main/SECRETS.md"
 
 if [ -f .git/MERGE_HEAD ]; then
   exit 0
@@ -372,12 +372,20 @@ fi
 pause_until_ready "Confirm SSH key added in GitHub."
 
 # ------------------------------------------------------------
-# Step 7: Test
+# Step 7: Test SSH (non-destructive)
 # ------------------------------------------------------------
 
 step "Step 7: Connectivity Test"
 
-SSH_TEST_OUTPUT="$(ssh -T "git@${SSH_ALIAS}" 2>&1 || true)"
+TROUBLESHOOTING_URL="https://github.com/mindvalley-ai/dev-bootstrap/blob/main/docs/troubleshooting.md#permission-denied-publickey-when-cloning-or-pushing"
+REPO_README_URL="https://github.com/mindvalley-ai/dev-bootstrap#readme"
+
+check_ssh() {
+  ssh -T "git@${SSH_ALIAS}" 2>&1 || true
+}
+
+# First attempt
+SSH_TEST_OUTPUT="$(check_ssh)"
 
 if echo "$SSH_TEST_OUTPUT" | grep -q "successfully authenticated"; then
 
@@ -399,27 +407,34 @@ elif echo "$SSH_TEST_OUTPUT" | grep -q "Permission denied"; then
   open_url "$GITHUB_KEYS_URL"
 
   pause_until_ready "Fix the SSH key setup, then press Enter to retry."
-  TROUBLESHOOTING_URL="https://github.com/mindvalley-ai/ai-dev-bootstrap/blob/main/docs/troubleshooting.md#permission-denied-publickey-when-cloning-or-pushing"
 
   # Retry once
-  SSH_RETRY_OUTPUT="$(ssh -T "git@${SSH_ALIAS}" 2>&1 || true)"
+  SSH_RETRY_OUTPUT="$(check_ssh)"
 
   if echo "$SSH_RETRY_OUTPUT" | grep -q "successfully authenticated"; then
+
     ok "SSH authentication successful after retry."
+
   else
+
     err "SSH authentication still failing."
     msg "$SSH_RETRY_OUTPUT"
     msg ""
-    msg ""
-    msg "May be you need bit of extra work ;-), opening the troubleshooting guide..."
-    open_url "$TROUBLESHOOTING_URL"
-fi
+    msg "Opening troubleshooting guide..."
 
+    open_url "$TROUBLESHOOTING_URL"
+
+    err "Setup incomplete due to SSH authentication failure."
+    exit 1
+  fi
 
 else
 
   warn "Unexpected SSH output:"
   msg "$SSH_TEST_OUTPUT"
+
+  err "Unable to verify SSH configuration."
+  exit 1
 
 fi
 
@@ -438,3 +453,11 @@ msg "  git remote set-url origin git@${SSH_ALIAS}:org/repo.git"
 msg ""
 msg "Default GitHub access remains unchanged."
 hr
+
+
+# ------------------------------------------------------------
+# Open documentation
+# ------------------------------------------------------------
+
+msg "Setup complete. Opening documentation and guides..."
+open_url "$REPO_README_URL"
