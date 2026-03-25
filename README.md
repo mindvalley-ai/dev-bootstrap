@@ -34,12 +34,16 @@ The script **does not** overwrite any existing GitHub SSH key. It uses a separat
   or
 - Open **Finder → Applications → Utilities → Terminal**.
 
-### 2. Run the script
+### 2. Run the scripts
 
 **Option A - Run from the web (no clone):**
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/mindvalley-ai/dev-bootstrap/main/scripts/macos-setup.sh)"
+```
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mindvalley-ai/dev-bootstrap/main/scripts/gcloud-setup.sh)"
 ```
 
 Replace `YOUR_USERNAME` with the GitHub username that owns this repo (or the fork you’re using).
